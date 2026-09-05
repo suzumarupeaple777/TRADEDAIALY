@@ -1,1 +1,257 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>株トレード日記</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --accent: #0288d1;
+      --accent-green: #2e7d32;
+      --accent-red: #c62828;
+      --text: #ffffff;
+      --sub-text: #b0b0b0;
+      --border: #333333;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 12px; padding-bottom: 50px; }
+    
+    /* 通算損益カード */
+    .total-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 16px; }
+    .total-title { font-size: 12px; color: var(--sub-text); margin-bottom: 4px; }
+    .total-val { font-size: 24px; font-weight: bold; }
+    .val-plus { color: #81c784; }
+    .val-minus { color: #ef5350; }
+
+    /* フォームエリア */
+    .form-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 20px; }
+    .form-title { font-size: 14px; font-weight: bold; margin-bottom: 12px; color: #ffb74d; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    
+    .input-group { margin-bottom: 10px; }
+    .label { font-size: 11px; color: var(--sub-text); margin-bottom: 4px; display: block; }
+    .input-box, .select-box { background: #2a2a2a; border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; font-size: 14px; width: 100%; outline: none; }
+    
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    
+    .stock-name-display { font-size: 12px; color: #81c784; margin-top: 4px; font-weight: bold; min-height: 18px; }
+
+    .submit-btn { background: var(--accent); border: none; color: white; padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; font-size: 15px; margin-top: 10px; cursor: pointer; }
+
+    /* 履歴エリア */
+    .history-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; }
+    .log-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; font-size: 13px; position: relative; }
+    .log-header { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    .log-date { color: var(--sub-text); font-size: 11px; }
+    .log-code { font-weight: bold; }
+    .log-detail { margin-bottom: 4px; line-height: 1.4; color: #ddd; }
+    .log-tag { display: inline-block; background: #333; font-size: 10px; padding: 2px 6px; border-radius: 4px; color: #ffb74d; margin-right: 4px; }
+    .log-pnl { font-size: 15px; font-weight: bold; text-align: right; margin-top: 4px; }
+    
+    .delete-btn { position: absolute; right: 10px; top: 10px; background: none; border: none; color: #666; font-size: 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <!-- 通算損益表示 -->
+  <div class="total-card">
+    <div class="total-title">通算損益額</div>
+    <div id="totalPnl" class="total-val">¥0</div>
+  </div>
+
+  <!-- 入力フォーム -->
+  <div class="form-card">
+    <div class="form-title">📝 新しいトレード日記を記録</div>
+    
+    <div class="input-group">
+      <label class="label">日付</label>
+      <input type="date" id="tradeDate" class="input-box">
+    </div>
+
+    <div class="input-group">
+      <label class="label">銘柄コード (例: 7203)</label>
+      <input type="number" id="stockCode" class="input-box" placeholder="4桁のコードを入力" oninput="searchStockName()">
+      <div id="stockName" class="stock-name-display"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="input-group">
+        <label class="label">買値 / 株価 (円)</label>
+        <input type="number" id="buyPrice" class="input-box" placeholder="1000" oninput="calcPnl()">
+      </div>
+      <div class="input-group">
+        <label class="label">決済価格 (円)</label>
+        <input type="number" id="sellPrice" class="input-box" placeholder="1050" oninput="calcPnl()">
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="input-group">
+        <label class="label">株数</label>
+        <input type="number" id="shares" class="input-box" value="100" step="100" oninput="calcPnl()">
+      </div>
+      <div class="input-group">
+        <label class="label">損益額 (自動計算可)</label>
+        <input type="number" id="pnlAmount" class="input-box" placeholder="5000">
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label class="label">エントリー根拠</label>
+      <select id="reason" class="select-box">
+        <option value="相場史郎流物別れ">相場史郎流物別れ</option>
+        <option value="石原順流ボラティリティ">石原順流ボラティリティ</option>
+        <option value="アクティビスト銘柄">アクティビスト銘柄</option>
+        <option value="長期優良銘柄">長期優良銘柄</option>
+        <option value="出来高と抵抗線">出来高と抵抗線</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label class="label">トレード結果</label>
+      <select id="result" class="select-box">
+        <option value="利確">利確</option>
+        <option value="損切り">損切り</option>
+        <option value="根拠が崩れる">根拠が崩れる</option>
+      </select>
+    </div>
+
+    <button class="submit-btn" onclick="saveLog()">日記に保存する</button>
+  </div>
+
+  <!-- 履歴一覧 -->
+  <div class="history-title">📚 トレード履歴</div>
+  <div id="logList"></div>
+
+  <script>
+    let logs = [];
+    let stockMaster = {};
+
+    // 初期化（今日の日付設定・データ読み込み）
+    window.onload = function() {
+      document.getElementById('tradeDate').valueAsDate = new Date();
+      const saved = localStorage.getItem('stock_trade_diary');
+      if (saved) {
+        logs = JSON.parse(saved);
+      }
+      fetchStockMaster();
+      updateUI();
+    };
+
+    // 東証銘柄マスターを自動取得 (API)
+    function fetchStockMaster() {
+      fetch('https://raw.githubusercontent.com/tatsuya-m/jpx-stock-list/main/data/jpx_stocks.json')
+        .then(res => res.json())
+        .then(data => {
+          data.forEach(item => {
+            stockMaster[item.code] = item.name;
+          });
+        }).catch(e => console.log('銘柄データ読み込みスキップ'));
+    }
+
+    // 銘柄コード入力時に名前を自動表示
+    function searchStockName() {
+      const code = document.getElementById('stockCode').value;
+      const nameEl = document.getElementById('stockName');
+      if (stockMaster[code]) {
+        nameEl.innerText = "🔍 " + stockMaster[code];
+      } else {
+        nameEl.innerText = "";
+      }
+    }
+
+    // 損益額の自動計算（買値・売値・株数から）
+    function calcPnl() {
+      const buy = parseFloat(document.getElementById('buyPrice').value);
+      const sell = parseFloat(document.getElementById('sellPrice').value);
+      const qty = parseInt(document.getElementById('shares').value) || 100;
+      if (!isNaN(buy) && !isNaN(sell)) {
+        document.getElementById('pnlAmount').value = (sell - buy) * qty;
+      }
+    }
+
+    // 日記の保存
+    function saveLog() {
+      const date = document.getElementById('tradeDate').value;
+      const code = document.getElementById('stockCode').value;
+      const name = document.getElementById('stockName').innerText.replace("🔍 ", "") || "銘柄不明";
+      const buy = document.getElementById('buyPrice').value;
+      const sell = document.getElementById('sellPrice').value;
+      const pnl = parseInt(document.getElementById('pnlAmount').value);
+      const reason = document.getElementById('reason').value;
+      const result = document.getElementById('result').value;
+
+      if (!code || isNaN(pnl)) {
+        alert("銘柄コードと損益額を入力してください");
+        return;
+      }
+
+      const newEntry = {
+        id: Date.now(),
+        date, code, name, buy, sell, pnl, reason, result
+      };
+
+      logs.unshift(newEntry);
+      localStorage.setItem('stock_trade_diary', JSON.stringify(logs));
+
+      // フォーム初期化
+      document.getElementById('stockCode').value = "";
+      document.getElementById('stockName').innerText = "";
+      document.getElementById('buyPrice').value = "";
+      document.getElementById('sellPrice').value = "";
+      document.getElementById('pnlAmount').value = "";
+
+      updateUI();
+    }
+
+    // 履歴の削除
+    function deleteLog(id) {
+      if (confirm("この記録を削除しますか？")) {
+        logs = logs.filter(item => item.id !== id);
+        localStorage.setItem('stock_trade_diary', JSON.stringify(logs));
+        updateUI();
+      }
+    }
+
+    // 画面の更新
+    function updateUI() {
+      // 通算損益の計算
+      const totalPnl = logs.reduce((sum, item) => sum + item.pnl, 0);
+      const totalEl = document.getElementById('totalPnl');
+      totalEl.innerText = "¥" + totalPnl.toLocaleString();
+      totalEl.className = totalPnl < 0 ? "total-val val-minus" : (totalPnl > 0 ? "total-val val-plus" : "total-val");
+
+      // 履歴一覧の描画
+      const listEl = document.getElementById('logList');
+      listEl.innerHTML = "";
+
+      logs.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "log-card";
+        const pnlClass = item.pnl < 0 ? "val-minus" : (item.pnl > 0 ? "val-plus" : "");
+        
+        card.innerHTML = `
+          <button class="delete-btn" onclick="deleteLog(${item.id})">✖</button>
+          <div class="log-header">
+            <span class="log-code">${item.code} ${item.name}</span>
+            <span class="log-date">${item.date}</span>
+          </div>
+          <div class="log-detail">
+            <span class="log-tag">${item.reason}</span>
+            <span class="log-tag" style="background:#555;">${item.result}</span>
+          </div>
+          <div class="log-detail">
+            株価: ${item.buy || '-'}円 ➔ 決済: ${item.sell || '-'}円
+          </div>
+          <div class="log-pnl ${pnlClass}">
+            ${item.pnl >= 0 ? '+' : ''}${item.pnl.toLocaleString()}円
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
