@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -43,7 +42,7 @@
     /* 履歴エリア */
     .history-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; }
     .log-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; font-size: 13px; position: relative; }
-    .log-header { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    .log-header { display: flex; justify-content: space-between; margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px; padding-right: 20px; }
     .log-date { color: var(--sub-text); font-size: 11px; }
     .log-code { font-weight: bold; }
     .log-detail { margin-bottom: 4px; line-height: 1.4; color: #ddd; }
@@ -70,10 +69,15 @@
       <input type="date" id="tradeDate" class="input-box">
     </div>
 
-    <div class="input-group">
-      <label class="label">銘柄コード (例: 7203)</label>
-      <input type="number" id="stockCode" class="input-box" placeholder="4桁のコードを入力" oninput="searchStockName()">
-      <div id="stockName" class="stock-name-display"></div>
+    <div class="grid-2">
+      <div class="input-group">
+        <label class="label">銘柄コード (例: 7203)</label>
+        <input type="number" id="stockCode" class="input-box" placeholder="4桁コード" oninput="fetchStockName()">
+      </div>
+      <div class="input-group">
+        <label class="label">銘柄名 (自動取得/直接入力)</label>
+        <input type="text" id="stockNameInput" class="input-box" placeholder="検索中...">
+      </div>
     </div>
 
     <div class="grid-2">
@@ -127,42 +131,52 @@
 
   <script>
     let logs = [];
-    let stockMaster = {};
+    let searchTimer = null;
 
-    // 初期化（今日の日付設定・データ読み込み）
     window.onload = function() {
       document.getElementById('tradeDate').valueAsDate = new Date();
       const saved = localStorage.getItem('stock_trade_diary');
       if (saved) {
         logs = JSON.parse(saved);
       }
-      fetchStockMaster();
       updateUI();
     };
 
-    // 東証銘柄マスターを自動取得 (API)
-    function fetchStockMaster() {
-      fetch('https://raw.githubusercontent.com/tatsuya-m/jpx-stock-list/main/data/jpx_stocks.json')
-        .then(res => res.json())
-        .then(data => {
-          data.forEach(item => {
-            stockMaster[item.code] = item.name;
-          });
-        }).catch(e => console.log('銘柄データ読み込みスキップ'));
-    }
-
-    // 銘柄コード入力時に名前を自動表示
-    function searchStockName() {
+    // Yahoo! Finance APIによる銘柄名リアルタイム取得
+    function fetchStockName() {
       const code = document.getElementById('stockCode').value;
-      const nameEl = document.getElementById('stockName');
-      if (stockMaster[code]) {
-        nameEl.innerText = "🔍 " + stockMaster[code];
-      } else {
-        nameEl.innerText = "";
+      const nameInput = document.getElementById('stockNameInput');
+
+      if (code.length < 4) {
+        nameInput.value = "";
+        return;
       }
+
+      clearTimeout(searchTimer);
+      nameInput.value = "検索中...";
+
+      searchTimer = setTimeout(() => {
+        const queryUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${code}.T`;
+        
+        fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(queryUrl)}`)
+          .then(response => response.json())
+          .then(data => {
+            const res = JSON.parse(data.contents);
+            if (res.quotes && res.quotes.length > 0) {
+              const name = res.quotes[0].shortname || res.quotes[0].longname || res.quotes[0].symbol;
+              nameInput.value = name;
+            } else {
+              nameInput.value = "銘柄名未見つからず";
+            }
+          })
+          .catch(() => {
+            nameInput.value = "";
+            nameInput.placeholder = "直接入力してください";
+          });
+      }, 400);
     }
 
-    // 損益額の自動計算（買値・売値・株数から）
+    // 損益額の自動計算
     function calcPnl() {
       const buy = parseFloat(document.getElementById('buyPrice').value);
       const sell = parseFloat(document.getElementById('sellPrice').value);
@@ -172,11 +186,11 @@
       }
     }
 
-    // 日記の保存
+    // 保存処理
     function saveLog() {
       const date = document.getElementById('tradeDate').value;
       const code = document.getElementById('stockCode').value;
-      const name = document.getElementById('stockName').innerText.replace("🔍 ", "") || "銘柄不明";
+      const name = document.getElementById('stockNameInput').value || "銘柄不明";
       const buy = document.getElementById('buyPrice').value;
       const sell = document.getElementById('sellPrice').value;
       const pnl = parseInt(document.getElementById('pnlAmount').value);
@@ -198,7 +212,7 @@
 
       // フォーム初期化
       document.getElementById('stockCode').value = "";
-      document.getElementById('stockName').innerText = "";
+      document.getElementById('stockNameInput').value = "";
       document.getElementById('buyPrice').value = "";
       document.getElementById('sellPrice').value = "";
       document.getElementById('pnlAmount').value = "";
@@ -206,7 +220,7 @@
       updateUI();
     }
 
-    // 履歴の削除
+    // 削除処理
     function deleteLog(id) {
       if (confirm("この記録を削除しますか？")) {
         logs = logs.filter(item => item.id !== id);
@@ -217,13 +231,11 @@
 
     // 画面の更新
     function updateUI() {
-      // 通算損益の計算
       const totalPnl = logs.reduce((sum, item) => sum + item.pnl, 0);
       const totalEl = document.getElementById('totalPnl');
       totalEl.innerText = "¥" + totalPnl.toLocaleString();
       totalEl.className = totalPnl < 0 ? "total-val val-minus" : (totalPnl > 0 ? "total-val val-plus" : "total-val");
 
-      // 履歴一覧の描画
       const listEl = document.getElementById('logList');
       listEl.innerHTML = "";
 
